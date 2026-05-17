@@ -97,7 +97,9 @@ const AVATAR_COLORS = [
   ['#6d28d9','#ede9fe'],
 ];
 function avatarStyle(index) {
-  const [bg, fg] = AVATAR_COLORS[index % AVATAR_COLORS.length];
+  // Safe modulo: handles -1 from findIndex correctly
+  const i = ((index % AVATAR_COLORS.length) + AVATAR_COLORS.length) % AVATAR_COLORS.length;
+  const [bg, fg] = AVATAR_COLORS[i];
   return `background:${bg};color:${fg};`;
 }
 

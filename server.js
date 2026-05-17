@@ -176,6 +176,9 @@ io.on('connection', (socket) => {
     // Update clue order
     room.clueOrder = room.clueOrder.map(id => id === oldId ? newId : id);
 
+    // Update playerId in submitted clues (so avatar lookup works after rejoin)
+    room.clues.forEach(c => { if (c.playerId === oldId) c.playerId = newId; });
+
     // Migrate votes & roundVotes keyed by old socket ID
     if (room.votes[oldId] !== undefined)      { room.votes[newId] = room.votes[oldId];      delete room.votes[oldId]; }
     if (room.roundVotes[oldId] !== undefined) { room.roundVotes[newId] = room.roundVotes[oldId]; delete room.roundVotes[oldId]; }
