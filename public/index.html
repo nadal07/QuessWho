@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>QuessWho — Word Impostor Game</title>
+  <meta name="description" content="A multiplayer social deduction game. Share a secret word, find the impostor!" />
+  <meta name="theme-color" content="#0a0a14" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="toast"></div>
+<div id="app">
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 1: HOME
+  ══════════════════════════════════════════ -->
+  <div class="screen active" id="screen-home">
+    <div class="logo">
+      <div class="logo-icon">🕵️</div>
+      <h1>QuessWho</h1>
+      <p>The word impostor game</p>
+    </div>
+
+    <div class="card glow-purple">
+      <p class="section-label">Your Name</p>
+      <div class="input-group">
+        <input type="text" id="home-name" placeholder="Enter your name…" maxlength="18" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="tab-row">
+      <button class="tab-btn active" id="tab-host" onclick="switchTab('host')">🏠 Host</button>
+      <button class="tab-btn" id="tab-join" onclick="switchTab('join')">🔗 Join</button>
+    </div>
+
+    <div id="panel-host" class="card">
+      <p class="section-label">Create a Room</p>
+      <p class="small text-dim mt-2" style="margin-bottom:14px;">You'll get a 4-letter code to share with friends. You'll be the game host.</p>
+      <button class="btn btn-primary" id="btn-create" onclick="createRoom()">🚀 Create Room</button>
+    </div>
+
+    <div id="panel-join" class="card" style="display:none;">
+      <p class="section-label">Room Code</p>
+      <div class="input-group">
+        <input type="text" id="home-code" class="code-input" placeholder="ABCD" maxlength="4" autocomplete="off" />
+      </div>
+      <button class="btn btn-secondary mt-4" id="btn-join" onclick="joinRoom()">🎮 Join Room</button>
+    </div>
+
+    <div class="card text-center">
+      <p class="small text-dim">🎯 3–10 players &nbsp;·&nbsp; Give clues &nbsp;·&nbsp; Find the impostor</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 2: LOBBY
+  ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-lobby">
+    <div class="room-code-display">
+      <p class="label">Room Code</p>
+      <p class="code" id="lobby-code">----</p>
+      <p class="hint">Share this code with your friends</p>
+    </div>
+
+    <button class="btn btn-ghost" onclick="copyRoomCode()">📋 Copy Code</button>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <h2>Players</h2>
+        <span class="status-pill waiting"><span class="pulse-dot"></span> Waiting</span>
+      </div>
+      <div class="player-list" id="lobby-players"></div>
+      <p class="small text-dim mt-4 text-center" id="lobby-hint">Waiting for more players…</p>
+    </div>
+
+    <button class="btn btn-primary" id="btn-start" onclick="startGame()" style="display:none;">
+      ⚡ Start Game
+    </button>
+    <button class="btn btn-ghost" onclick="leaveGame()">← Leave</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 3: WORD REVEAL
+  ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-reveal">
+    <div class="card text-center">
+      <h2>Your Secret Word</h2>
+      <p class="small text-dim mt-2">Tap the card to reveal — keep it private! 🤫</p>
+    </div>
+
+    <div class="card reveal-card glow-purple" id="reveal-card" onclick="toggleReveal()">
+      <div class="reveal-face" id="reveal-hidden">
+        <div class="lock-icon">🔒</div>
+        <p class="tap-hint">Tap to reveal your word</p>
+      </div>
+      <div class="reveal-face" id="reveal-shown" style="display:none;">
+        <div class="eye-icon" style="opacity:1;">👁️</div>
+        <p class="word-display" id="reveal-word">—</p>
+        <span class="role-badge" id="reveal-role-badge">—</span>
+        <p class="tap-hint" style="margin-top:4px;">Tap to hide again</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <p class="section-label" style="margin:0;">Ready</p>
+        <span id="ready-count" class="text-dim small">0 / ?</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="ready-bar" style="width:0%"></div>
+      </div>
+      <p class="small text-dim text-center mt-4">When all players are ready, the clue round begins.</p>
+    </div>
+
+    <button class="btn btn-success" id="btn-ready" onclick="playerReady()">✅ I've Seen My Word</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 4: CLUES
+  ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-clues">
+    <div class="card" style="padding:16px 20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2>Clue Round</h2>
+        <span class="small text-dim" id="clue-counter">0 / ?</span>
+      </div>
+      <div class="progress-bar-wrap" style="margin-top:10px;">
+        <div class="progress-bar" id="clue-bar" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="card" id="turn-banner-card">
+      <div class="current-turn-banner" id="current-turn-banner">
+        <span class="dot"></span>
+        <span id="turn-text">Waiting…</span>
+      </div>
+    </div>
+
+    <div class="card" id="clue-input-card" style="display:none;">
+      <p class="section-label">Your Clue</p>
+      <div class="input-group">
+        <input type="text" id="clue-input" placeholder="Give a one-word or short clue…" maxlength="100" autocomplete="off" />
+      </div>
+      <button class="btn btn-primary mt-4" onclick="submitClue()">Send Clue ✉️</button>
+    </div>
+
+    <div class="card">
+      <p class="section-label" style="margin-bottom:10px;">Clues So Far</p>
+      <div class="clue-list scroll-area" id="clue-list">
+        <p class="small text-dim text-center">No clues yet…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 5: VOTING
+  ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-voting">
+    <div class="card text-center glow-purple">
+      <div style="font-size:2rem;">🗳️</div>
+      <h2 style="margin-top:8px;">Vote!</h2>
+      <p class="small text-dim mt-2">Who do you think is the impostor?</p>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <p class="section-label" style="margin:0;">All Clues</p>
+      </div>
+      <div class="clue-list scroll-area" id="voting-clue-list"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-label" style="margin-bottom:12px;">Choose the Impostor</p>
+      <div class="vote-grid" id="vote-grid"></div>
+    </div>
+
+    <button class="btn btn-danger" id="btn-vote" onclick="submitVote()" disabled>🎯 Submit Vote</button>
+
+    <div class="card text-center" id="voting-wait" style="display:none;">
+      <span class="status-pill waiting"><span class="pulse-dot"></span> Waiting for votes</span>
+      <p class="small text-dim mt-4" id="vote-wait-count">0 / ? votes in</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 6: RESULTS
+  ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-results">
+    <div class="card glow-purple">
+      <div class="result-hero" id="result-hero">
+        <div class="result-icon" id="result-icon">🎉</div>
+        <p class="result-title" id="result-title">—</p>
+        <p class="result-subtitle" id="result-subtitle">—</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="section-label" style="margin-bottom:10px;">The Words</p>
+      <div class="word-reveal-result">
+        <div class="word-box civilian-box">
+          <p class="wb-label">☑ Civilian</p>
+          <p class="wb-word" id="res-civilian-word">—</p>
+        </div>
+        <div class="word-box impostor-box">
+          <p class="wb-label">⚠ Impostor</p>
+          <p class="wb-word" id="res-impostor-word">—</p>
+        </div>
+      </div>
+      <p class="small text-dim text-center mt-4" id="res-impostor-name">—</p>
+    </div>
+
+    <div class="card">
+      <p class="section-label" style="margin-bottom:10px;">Vote Tally</p>
+      <div class="vote-tally" id="vote-tally"></div>
+    </div>
+
+    <div id="result-host-actions" style="display:none;">
+      <button class="btn btn-primary" onclick="playAgain()">🔄 Play Again</button>
+    </div>
+    <button class="btn btn-ghost" onclick="leaveGame()">🚪 Leave Game</button>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+services:
+  quesswho:
+    build: .
+    container_name: quesswho
+    ports:
+      - "7429:7429"
+    environment:
+      - PORT=7429
+      - NODE_ENV=production
+    restart: unless-stopped
