@@ -16,8 +16,11 @@ const state = {
   clues: [],
   selectedVoteId: null,
   hasVoted: false,
+  hasRoundVoted: false,
   wordRevealed: false,
   readySubmitted: false,
+  roundNumber: 1,
+  impostorRoundsSurvived: 0,
 };
 
 // ─── Screen Management ────────────────────────────────────────────────────
@@ -231,6 +234,61 @@ function submitClue() {
   socket.emit('submit-clue', { clue });
 }
 
+// ─── Round Tracker Helper ─────────────────────────────────────────────────
+const MAX_ROUNDS = 4;
+function renderRoundTracker(el, survived, current) {
+  let html = '<div class="round-tracker">';
+  for (let i = 0; i < MAX_ROUNDS; i++) {
+    if (i < survived) html += '<div class="round-dot survived" title="Impostor survived"></div>';
+    else if (i === survived && current) html += '<div class="round-dot current" title="Current round"></div>';
+    else html += '<div class="round-dot" title="Future round"></div>';
+  }
+  html += '</div>';
+  html += `<p class="round-label">Round ${survived + 1} of ${MAX_ROUNDS} — ${MAX_ROUNDS - survived} round${MAX_ROUNDS - survived !== 1 ? 's' : ''} left for impostor to win</p>`;
+  el.innerHTML = html;
+}
+
+// ─── Round Vote Screen ────────────────────────────────────────────────────
+function renderRoundVoteScreen(players, clues, roundNumber, impostorRoundsSurvived) {
+  state.hasRoundVoted = false;
+  document.getElementById('rv-buttons').style.display = 'flex';
+  document.getElementById('rv-waiting').style.display = 'none';
+  document.getElementById('btn-vote-now').disabled = false;
+  document.getElementById('btn-skip-round').disabled = false;
+
+  renderRoundTracker(
+    document.getElementById('rv-round-tracker'),
+    impostorRoundsSurvived,
+    true
+  );
+
+  // Clue list
+  const cl = document.getElementById('rv-clue-list');
+  cl.innerHTML = clues.map((c) => {
+    const pIdx = players.findIndex(p => p.id === c.playerId);
+    return `
+      <div class="clue-item">
+        <div class="avatar" style="${avatarStyle(pIdx)};width:30px;height:30px;font-size:.75rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
+          ${c.playerName[0].toUpperCase()}
+        </div>
+        <div>
+          <p class="ci-name">${escHtml(c.playerName)}</p>
+          <p class="ci-text">${escHtml(c.clue)}</p>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function submitRoundVote(decision) {
+  if (state.hasRoundVoted) return;
+  state.hasRoundVoted = true;
+  socket.emit('submit-round-vote', { decision });
+
+  document.getElementById('rv-buttons').style.display = 'none';
+  document.getElementById('rv-waiting').style.display = '';
+  document.getElementById('rv-wait-count').textContent = '1 / ? decided';
+}
+
 // ─── Voting Screen ────────────────────────────────────────────────────────
 function renderVotingScreen(players, clues) {
   // Clues summary
@@ -305,9 +363,9 @@ function submitVote() {
 // ─── Results Screen ───────────────────────────────────────────────────────
 function renderResults(data) {
   const { tally, eliminatedId, eliminatedName, impostorId, impostorName,
-          impostorFound, civilianWord, impostorWord, clues, players, votes } = data;
+          impostorFound, impostorWins, civilianWord, impostorWord,
+          clues, players, votes, roundsSurvived, skipped } = data;
 
-  // Hero
   const icon  = document.getElementById('result-icon');
   const title = document.getElementById('result-title');
   const sub   = document.getElementById('result-subtitle');
@@ -317,11 +375,17 @@ function renderResults(data) {
     title.textContent = 'Civilians Win!';
     title.style.color = 'var(--green)';
     sub.textContent   = `You caught ${impostorName}!`;
-  } else {
+  } else if (impostorWins || (roundsSurvived >= MAX_ROUNDS)) {
     icon.textContent  = '🕵️';
     title.textContent = 'Impostor Wins!';
     title.style.color = 'var(--red)';
-    sub.textContent   = `${impostorName} fooled everyone!`;
+    sub.textContent   = `${impostorName} survived all ${MAX_ROUNDS} rounds!`;
+  } else {
+    // Wrong player eliminated — next round coming
+    icon.textContent  = '😐';
+    title.textContent = 'Wrong Player!';
+    title.style.color = 'var(--amber)';
+    sub.textContent   = `${impostorName} is still out there. Next round starting…`;
   }
 
   // Words
@@ -329,26 +393,31 @@ function renderResults(data) {
   document.getElementById('res-impostor-word').textContent = impostorWord;
   document.getElementById('res-impostor-name').textContent = `🕵️ ${impostorName} was the impostor`;
 
-  // Tally
+  // Tally (may be empty if skipped)
   const tallyEl = document.getElementById('vote-tally');
   const sortedPlayers = [...players].sort((a, b) => (tally[b.id] || 0) - (tally[a.id] || 0));
-  tallyEl.innerHTML = sortedPlayers.map((p, i) => {
-    const voteCount = tally[p.id] || 0;
-    const isImpostor = p.id === impostorId;
-    const wasEliminated = p.id === eliminatedId;
-    return `
-      <div class="tally-row ${isImpostor ? 'was-impostor' : ''}">
-        <div class="avatar" style="${avatarStyle(players.findIndex(x => x.id === p.id))};width:30px;height:30px;font-size:.75rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
-          ${p.name[0].toUpperCase()}
-        </div>
-        <span class="tr-name">${escHtml(p.name)}${isImpostor ? ' 🕵️' : ''}</span>
-        <span class="tr-votes">${voteCount} vote${voteCount !== 1 ? 's' : ''}</span>
-        ${wasEliminated ? '<span class="tr-icon">⬅️</span>' : ''}
-      </div>`;
-  }).join('');
+  if (Object.keys(tally).length === 0) {
+    tallyEl.innerHTML = '<p class="small text-dim text-center">No vote was held this round.</p>';
+  } else {
+    tallyEl.innerHTML = sortedPlayers.map((p) => {
+      const voteCount = tally[p.id] || 0;
+      const isImpostor = p.id === impostorId;
+      const wasEliminated = p.id === eliminatedId;
+      return `
+        <div class="tally-row ${isImpostor ? 'was-impostor' : ''}">
+          <div class="avatar" style="${avatarStyle(players.findIndex(x => x.id === p.id))};width:30px;height:30px;font-size:.75rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
+            ${p.name[0].toUpperCase()}
+          </div>
+          <span class="tr-name">${escHtml(p.name)}${isImpostor ? ' 🕵️' : ''}</span>
+          <span class="tr-votes">${voteCount} vote${voteCount !== 1 ? 's' : ''}</span>
+          ${wasEliminated ? '<span class="tr-icon">⬅️</span>' : ''}
+        </div>`;
+    }).join('');
+  }
 
-  // Host actions
-  document.getElementById('result-host-actions').style.display = state.isHost ? '' : 'none';
+  // Host actions: only show Play Again if game is truly over
+  const gameOver = impostorFound || impostorWins || (roundsSurvived >= MAX_ROUNDS);
+  document.getElementById('result-host-actions').style.display = (state.isHost && gameOver) ? '' : 'none';
 }
 
 // ─── Play Again ───────────────────────────────────────────────────────────
@@ -417,7 +486,7 @@ socket.on('lobby-update', ({ players, hostId, code }) => {
   if (active && active.id === 'screen-results') showScreen('lobby');
 });
 
-socket.on('game-started', ({ word, role, category, players, clueOrder, phase }) => {
+socket.on('game-started', ({ word, role, category, players, clueOrder, roundNumber, impostorRoundsSurvived }) => {
   state.myWord = word;
   state.myRole = role;
   state.players = players;
@@ -425,8 +494,11 @@ socket.on('game-started', ({ word, role, category, players, clueOrder, phase }) 
   state.clues = [];
   state.selectedVoteId = null;
   state.hasVoted = false;
+  state.hasRoundVoted = false;
   state.wordRevealed = false;
   state.readySubmitted = false;
+  state.roundNumber = roundNumber || 1;
+  state.impostorRoundsSurvived = impostorRoundsSurvived || 0;
 
   // Reset reveal UI
   document.getElementById('reveal-hidden').style.display = 'flex';
@@ -465,6 +537,55 @@ socket.on('clue-submitted', ({ clues, nextPlayerId, currentClueIndex }) => {
   state.clues = clues;
   state.currentClueIndex = currentClueIndex;
   renderClueScreen(nextPlayerId, clues, state.clueOrder, state.players);
+});
+
+socket.on('round-vote-phase-start', ({ players, clues, roundNumber, impostorRoundsSurvived }) => {
+  state.players = players;
+  state.clues = clues;
+  state.roundNumber = roundNumber;
+  state.impostorRoundsSurvived = impostorRoundsSurvived;
+  showScreen('round-vote');
+  renderRoundVoteScreen(players, clues, roundNumber, impostorRoundsSurvived);
+});
+
+socket.on('round-vote-update', ({ decided, total }) => {
+  document.getElementById('rv-wait-count').textContent = `${decided} / ${total} decided`;
+});
+
+socket.on('round-skipped', ({ roundNumber, impostorRoundsSurvived, roundsRemaining }) => {
+  showToast(`Round skipped! ${roundsRemaining} round${roundsRemaining !== 1 ? 's' : ''} left for impostor to win.`, '');
+});
+
+socket.on('new-round', ({ word, role, players, clueOrder, roundNumber, impostorRoundsSurvived }) => {
+  state.myWord = word;
+  state.myRole = role;
+  state.players = players;
+  state.clueOrder = clueOrder;
+  state.clues = [];
+  state.selectedVoteId = null;
+  state.hasVoted = false;
+  state.hasRoundVoted = false;
+  state.wordRevealed = false;
+  state.readySubmitted = false;
+  state.roundNumber = roundNumber;
+  state.impostorRoundsSurvived = impostorRoundsSurvived;
+
+  document.getElementById('reveal-hidden').style.display = 'flex';
+  document.getElementById('reveal-shown').style.display = 'none';
+  document.getElementById('reveal-word').textContent = word;
+
+  const badge = document.getElementById('reveal-role-badge');
+  badge.textContent = role === 'impostor' ? '🕵️ You are the Impostor' : '✅ You are a Civilian';
+  badge.className = `role-badge ${role}`;
+
+  const btnReady = document.getElementById('btn-ready');
+  btnReady.disabled = false;
+  btnReady.textContent = "✅ I've Seen My Word";
+
+  document.getElementById('ready-count').textContent = `0 / ${players.length}`;
+  document.getElementById('ready-bar').style.width = '0%';
+
+  showScreen('reveal');
 });
 
 socket.on('voting-phase-start', ({ players, clues }) => {

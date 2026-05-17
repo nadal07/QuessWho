@@ -167,6 +167,33 @@
   </div>
 
   <!-- ══════════════════════════════════════════
+       SCREEN 4b: ROUND VOTE (vote or skip?)
+  ══════════════════════════════════════════ -->
+  <div class="screen" id="screen-round-vote">
+    <div class="card accent-border text-center">
+      <div style="font-size:2.2rem;margin-bottom:10px;">🤔</div>
+      <h2>Vote Now?</h2>
+      <p class="small text-dim mt-2">If any civilian skips, a new round begins with a fresh word.</p>
+      <div class="round-tracker" id="rv-round-tracker" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <p class="section-label" style="margin-bottom:10px;">All Clues This Round</p>
+      <div class="clue-list scroll-area" id="rv-clue-list"></div>
+    </div>
+
+    <div id="rv-buttons" style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn btn-danger" id="btn-vote-now" onclick="submitRoundVote('vote')">🗳️ Vote Now — I know who it is</button>
+      <button class="btn btn-outline" id="btn-skip-round" onclick="submitRoundVote('skip')">⏭️ Skip — Need another round</button>
+    </div>
+
+    <div class="card text-center" id="rv-waiting" style="display:none;">
+      <span class="status-pill waiting"><span class="pulse-dot"></span> Waiting for everyone</span>
+      <p class="small text-dim mt-3" id="rv-wait-count">0 / ? decided</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
        SCREEN 5: VOTING
   ══════════════════════════════════════════ -->
   <div class="screen" id="screen-voting">

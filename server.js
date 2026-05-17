@@ -16,15 +16,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 // rooms[code] = {
 //   code, hostId,
 //   players: [{ id, name, isHost }],
-//   phase: 'lobby' | 'reveal' | 'clues' | 'voting' | 'results',
+//   phase: 'lobby' | 'reveal' | 'clues' | 'round-vote' | 'voting' | 'results',
 //   wordPair: { civilian, impostor, category },
 //   impostorId: socketId,
 //   clues: [{ playerId, playerName, clue }],
 //   votes: { [voterId]: votedForId },
+//   roundVotes: { [playerId]: 'vote' | 'skip' },
 //   clueOrder: [socketId, ...],
 //   currentClueIndex: number,
+//   roundNumber: number,          // current round (1-based)
+//   impostorRoundsSurvived: number, // rounds impostor survived without being caught
 // }
 const rooms = {};
+
+const MAX_ROUNDS = 4;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function generateCode() {
@@ -46,6 +51,38 @@ function broadcastLobby(code) {
     hostId: room.hostId,
     code: room.code,
   });
+}
+
+// Start a new round with a fresh word — same players, same impostor
+function startNewRound(code) {
+  const room = getRoomSafe(code);
+  if (!room) return;
+
+  const pair = words[Math.floor(Math.random() * words.length)];
+  room.wordPair = pair;
+  room.clues = [];
+  room.votes = {};
+  room.roundVotes = {};
+  room.clueOrder = [...room.players].sort(() => Math.random() - 0.5).map(p => p.id);
+  room.currentClueIndex = 0;
+  room.readyPlayers = null;
+  room.phase = 'reveal';
+
+  room.players.forEach(player => {
+    const assignedWord = player.id === room.impostorId ? pair.impostor : pair.civilian;
+    const role = player.id === room.impostorId ? 'impostor' : 'civilian';
+    io.to(player.id).emit('new-round', {
+      word: assignedWord,
+      role,
+      category: pair.category,
+      players: room.players,
+      clueOrder: room.clueOrder,
+      roundNumber: room.roundNumber,
+      impostorRoundsSurvived: room.impostorRoundsSurvived,
+    });
+  });
+
+  console.log(`[Game] Room ${code} | New round ${room.roundNumber} | ${pair.civilian}/${pair.impostor}`);
 }
 
 function removePlayer(socketId) {
@@ -107,8 +144,11 @@ io.on('connection', (socket) => {
       impostorId: null,
       clues: [],
       votes: {},
+      roundVotes: {},
       clueOrder: [],
       currentClueIndex: 0,
+      roundNumber: 1,
+      impostorRoundsSurvived: 0,
     };
     socket.join(code);
     socket.data.roomCode = code;
@@ -161,6 +201,9 @@ io.on('connection', (socket) => {
     room.currentClueIndex = 0;
     room.clues = [];
     room.votes = {};
+    room.roundVotes = {};
+    room.roundNumber = 1;
+    room.impostorRoundsSurvived = 0;
     room.phase = 'reveal';
 
     // Emit private word to each player
@@ -173,6 +216,8 @@ io.on('connection', (socket) => {
         category: pair.category,
         players: room.players,
         clueOrder: room.clueOrder,
+        roundNumber: room.roundNumber,
+        impostorRoundsSurvived: room.impostorRoundsSurvived,
         phase: 'reveal',
       });
     });
@@ -224,12 +269,82 @@ io.on('connection', (socket) => {
       currentClueIndex: room.currentClueIndex,
     });
 
-    // All clues submitted → voting
+    // All clues submitted → ask everyone if they want to vote
     if (room.currentClueIndex >= room.clueOrder.length) {
+      room.phase = 'round-vote';
+      room.roundVotes = {};
+      io.to(code).emit('round-vote-phase-start', {
+        players: room.players,
+        clues: room.clues,
+        roundNumber: room.roundNumber,
+        impostorRoundsSurvived: room.impostorRoundsSurvived,
+      });
+    }
+  });
+
+  // SUBMIT ROUND VOTE (vote now vs skip)
+  socket.on('submit-round-vote', ({ decision }) => {
+    const code = socket.data.roomCode;
+    const room = getRoomSafe(code);
+    if (!room || room.phase !== 'round-vote') return;
+    if (!['vote', 'skip'].includes(decision)) return;
+    if (room.roundVotes[socket.id]) return; // already voted
+
+    room.roundVotes[socket.id] = decision;
+    const decided = Object.keys(room.roundVotes).length;
+    io.to(code).emit('round-vote-update', { decided, total: room.players.length });
+
+    // Wait until all players have decided
+    if (decided < room.players.length) return;
+
+    // Check if any CIVILIAN voted skip
+    const anycivilianSkipped = room.players.some(p =>
+      p.id !== room.impostorId && room.roundVotes[p.id] === 'skip'
+    );
+
+    if (anycivilianSkipped) {
+      // Round skipped — impostor survives this round
+      room.impostorRoundsSurvived++;
+      room.roundNumber++;
+
+      if (room.impostorRoundsSurvived >= MAX_ROUNDS) {
+        // Impostor wins by surviving MAX_ROUNDS rounds
+        const impostorPlayer = room.players.find(p => p.id === room.impostorId);
+        room.phase = 'results';
+        io.to(code).emit('game-results', {
+          tally: {},
+          eliminatedId: null,
+          eliminatedName: null,
+          impostorId: room.impostorId,
+          impostorName: impostorPlayer?.name,
+          impostorFound: false,
+          civilianWord: room.wordPair.civilian,
+          impostorWord: room.wordPair.impostor,
+          category: room.wordPair.category,
+          clues: room.clues,
+          players: room.players,
+          votes: {},
+          roundsSurvived: room.impostorRoundsSurvived,
+          skipped: true,
+        });
+        console.log(`[Game] Room ${code} | Impostor won after ${MAX_ROUNDS} rounds!`);
+      } else {
+        // Start next round
+        io.to(code).emit('round-skipped', {
+          roundNumber: room.roundNumber,
+          impostorRoundsSurvived: room.impostorRoundsSurvived,
+          roundsRemaining: MAX_ROUNDS - room.impostorRoundsSurvived,
+        });
+        setTimeout(() => startNewRound(code), 3000);
+      }
+    } else {
+      // All civilians want to vote — proceed to elimination
       room.phase = 'voting';
+      room.votes = {};
       io.to(code).emit('voting-phase-start', {
         players: room.players,
         clues: room.clues,
+        roundNumber: room.roundNumber,
       });
     }
   });
@@ -266,6 +381,14 @@ io.on('connection', (socket) => {
       const impostorFound = eliminatedId === room.impostorId;
       const impostorPlayer = room.players.find(p => p.id === room.impostorId);
 
+      if (!impostorFound) {
+        // Wrong person eliminated — impostor survives this vote
+        room.impostorRoundsSurvived++;
+        room.roundNumber++;
+      }
+
+      const impostorWins = !impostorFound && room.impostorRoundsSurvived >= MAX_ROUNDS;
+
       room.phase = 'results';
       io.to(code).emit('game-results', {
         tally,
@@ -274,15 +397,23 @@ io.on('connection', (socket) => {
         impostorId: room.impostorId,
         impostorName: impostorPlayer?.name,
         impostorFound,
+        impostorWins,
         civilianWord: room.wordPair.civilian,
         impostorWord: room.wordPair.impostor,
         category: room.wordPair.category,
         clues: room.clues,
         players: room.players,
         votes: room.votes,
+        roundsSurvived: room.impostorRoundsSurvived,
+        skipped: false,
       });
 
-      console.log(`[Game] Room ${code} results | Impostor: ${impostorPlayer?.name} | Found: ${impostorFound}`);
+      // If impostor survived but hasn't won yet, start next round after delay
+      if (!impostorFound && !impostorWins) {
+        setTimeout(() => startNewRound(code), 6000);
+      }
+
+      console.log(`[Game] Room ${code} results | Impostor: ${impostorPlayer?.name} | Found: ${impostorFound} | Survived: ${room.impostorRoundsSurvived}`);
     }
   });
 
@@ -298,9 +429,12 @@ io.on('connection', (socket) => {
     room.impostorId = null;
     room.clues = [];
     room.votes = {};
+    room.roundVotes = {};
     room.clueOrder = [];
     room.currentClueIndex = 0;
     room.readyPlayers = null;
+    room.roundNumber = 1;
+    room.impostorRoundsSurvived = 0;
 
     broadcastLobby(code);
   });

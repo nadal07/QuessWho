@@ -713,4 +713,46 @@ h3 { font-size: .95rem; font-weight: 600; }
 .stat-item { text-align: center; }
 .stat-item .stat-val { font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; color: var(--gold-l); }
 .stat-item .stat-label { font-size: .65rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); margin-top: 2px; }
-.stat-sep { width: 1px; height: 32px; background: var(--border); }
+/* ── Round Tracker ── */
+.round-tracker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.round-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface-2);
+  transition: background .3s, border-color .3s;
+}
+.round-dot.survived {
+  background: var(--red);
+  border-color: rgba(204,85,85,0.5);
+  box-shadow: 0 0 8px rgba(204,85,85,0.4);
+}
+.round-dot.current {
+  background: var(--gold);
+  border-color: rgba(201,168,76,0.6);
+  box-shadow: 0 0 10px rgba(201,168,76,0.4);
+  animation: blink 1.5s ease infinite;
+}
+.round-label {
+  font-size: .72rem;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+}
+
+/* ── Skip banner ── */
+.skip-banner {
+  text-align: center;
+  padding: 16px;
+  background: rgba(201,168,76,0.08);
+  border: 1px solid rgba(201,168,76,0.2);
+  border-radius: var(--radius-sm);
+}
+.skip-banner .sb-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: var(--gold-l); }
+.skip-banner .sb-sub { font-size: .82rem; color: var(--text-dim); margin-top: 4px; }
+
