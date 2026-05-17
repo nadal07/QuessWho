@@ -10,6 +10,16 @@
 </head>
 <body>
 <div id="toast"></div>
+
+<!-- ── Peek Word Modal ─────────────────────────────────────── -->
+<div id="peek-overlay" onclick="closePeek()">
+  <div id="peek-modal">
+    <p id="peek-label">YOUR WORD</p>
+    <p id="peek-word">—</p>
+    <span id="peek-role">—</span>
+    <p id="peek-close-hint">Tap anywhere to hide</p>
+  </div>
+</div>
 <div id="app">
 
   <!-- ══════════════════════════════════════════
@@ -123,7 +133,10 @@
     <div class="card" style="padding:16px 20px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <h2>Clue Round</h2>
-        <span class="small text-dim" id="clue-counter">0 / ?</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="small text-dim" id="clue-counter">0 / ?</span>
+          <button class="peek-btn" id="clue-peek-btn" onclick="openPeek()" title="Peek at your word">👁 My Word</button>
+        </div>
       </div>
       <div class="progress-bar-wrap" style="margin-top:10px;">
         <div class="progress-bar" id="clue-bar" style="width:0%"></div>
@@ -157,10 +170,11 @@
        SCREEN 5: VOTING
   ══════════════════════════════════════════ -->
   <div class="screen" id="screen-voting">
-    <div class="card text-center glow-purple">
+    <div class="card text-center" style="position:relative;">
       <div style="font-size:2rem;">🗳️</div>
       <h2 style="margin-top:8px;">Vote!</h2>
       <p class="small text-dim mt-2">Who do you think is the impostor?</p>
+      <button class="peek-btn" style="margin-top:12px;" onclick="openPeek()">👁 Peek My Word</button>
     </div>
 
     <div class="card">

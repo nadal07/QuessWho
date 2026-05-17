@@ -588,7 +588,109 @@ h2 {
 }
 h3 { font-size: .95rem; font-weight: 600; }
 
-/* ── Scrollable area ── */
+/* ── Peek Word Modal ── */
+#peek-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease;
+}
+#peek-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+#peek-modal {
+  background: var(--surface);
+  border: 1px solid rgba(201,168,76,0.3);
+  border-radius: var(--radius);
+  padding: 36px 28px;
+  text-align: center;
+  width: 100%;
+  max-width: 320px;
+  box-shadow: 0 0 60px rgba(201,168,76,0.15), var(--shadow-lg);
+  transform: scale(0.92) translateY(10px);
+  transition: transform .3s cubic-bezier(.16,1,.3,1);
+  position: relative;
+}
+#peek-overlay.open #peek-modal {
+  transform: scale(1) translateY(0);
+}
+#peek-modal::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.6), transparent);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+#peek-label {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+#peek-word {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--gold-l);
+  line-height: 1;
+  text-shadow: 0 0 30px rgba(201,168,76,0.4);
+  margin-bottom: 14px;
+}
+#peek-role {
+  display: inline-block;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 4px 14px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+#peek-role.civilian { background: rgba(78,173,124,0.12); color: var(--green); border: 1px solid rgba(78,173,124,0.25); }
+#peek-role.impostor { background: rgba(204,85,85,0.12); color: var(--red); border: 1px solid rgba(204,85,85,0.25); }
+#peek-close-hint {
+  font-size: .75rem;
+  color: var(--text-dim);
+  margin-top: 6px;
+  letter-spacing: 0.3px;
+}
+
+/* ── Peek Button ── */
+.peek-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  background: var(--gold-dim);
+  border: 1px solid rgba(201,168,76,0.25);
+  border-radius: 99px;
+  color: var(--gold-l);
+  font-family: 'Inter', sans-serif;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+  white-space: nowrap;
+}
+.peek-btn:hover {
+  background: rgba(201,168,76,0.2);
+  border-color: rgba(201,168,76,0.4);
+}
+.peek-btn:active { transform: scale(0.97); }
+
 .scroll-area {
   max-height: 220px;
   overflow-y: auto;

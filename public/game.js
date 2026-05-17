@@ -38,6 +38,26 @@ function showToast(msg, type = '') {
   toastTimer = setTimeout(() => { t.className = ''; }, 3500);
 }
 
+// ─── Peek Word Modal ──────────────────────────────────────────────────────
+function openPeek() {
+  const overlay = document.getElementById('peek-overlay');
+  document.getElementById('peek-word').textContent = state.myWord || '—';
+  const roleEl = document.getElementById('peek-role');
+  if (state.myRole === 'impostor') {
+    roleEl.textContent = '🕵️ You are the Impostor';
+    roleEl.className = 'impostor';
+  } else {
+    roleEl.textContent = '✅ You are a Civilian';
+    roleEl.className = 'civilian';
+  }
+  overlay.classList.add('open');
+}
+
+function closePeek() {
+  document.getElementById('peek-overlay').classList.remove('open');
+}
+
+
 // ─── Tab Switch ───────────────────────────────────────────────────────────
 function switchTab(tab) {
   document.getElementById('tab-host').classList.toggle('active', tab === 'host');
@@ -353,6 +373,7 @@ function escHtml(str) {
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closePeek(); return; }
   if (e.key === 'Enter') {
     const activeScreen = document.querySelector('.screen.active');
     if (!activeScreen) return;
