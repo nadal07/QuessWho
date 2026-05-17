@@ -23,6 +23,26 @@ const state = {
   impostorRoundsSurvived: 0,
 };
 
+// ─── Session Persistence (localStorage) ──────────────────────────────────
+const SESSION_KEY = 'quesswho_session';
+
+function saveSession(overrides = {}) {
+  const existing = loadSession() || {};
+  const session = { ...existing, ...overrides };
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (_) {}
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
 // ─── Screen Management ────────────────────────────────────────────────────
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -339,7 +359,7 @@ function selectVote(playerId) {
   if (chosen) {
     chosen.classList.add('selected');
     const checkEl = document.getElementById(`vc-check-${playerId}`);
-    if (checkEl) checkEl.textContent = '✓';
+    checkEl.textContent = '✓';
   }
 
   document.getElementById('btn-vote').disabled = false;
@@ -381,15 +401,11 @@ function renderResults(data) {
     title.style.color = 'var(--red)';
     sub.textContent   = `${impostorName} survived all ${MAX_ROUNDS} rounds!`;
   } else {
-    // Wrong player eliminated — next round coming
-    // icon.textContent  = '😐';
-    // title.textContent = 'Wrong Player!';
-    // title.style.color = 'var(--amber)';
-    // sub.textContent   = `${impostorName} is still out there. Next round starting…`;
-    icon.textContent  = '🕵️';
-    title.textContent = 'Impostor Wins!';
-    title.style.color = 'var(--red)';
-    sub.textContent   = `${impostorName} survived`;
+    // Wrong player eliminated — next round coming automatically
+    icon.textContent  = '😬';
+    title.textContent = 'Wrong Player!';
+    title.style.color = 'var(--amber, #d4a84c)';
+    sub.textContent   = `${impostorName || 'The impostor'} is still out there. Next round starting…`;
   }
 
   // Words
@@ -431,6 +447,7 @@ function playAgain() {
 
 // ─── Leave Game ───────────────────────────────────────────────────────────
 function leaveGame() {
+  clearSession();
   socket.disconnect();
   location.reload();
 }
@@ -464,16 +481,116 @@ document.addEventListener('keydown', (e) => {
 // ─── Socket Events ────────────────────────────────────────────────────────
 socket.on('connect', () => {
   state.myId = socket.id;
+
+  const session = loadSession();
+  if (session && session.name && session.roomCode) {
+    socket.emit('rejoin-room', { name: session.name, roomCode: session.roomCode });
+  }
+});
+
+socket.on('rejoin-success', (data) => {
+  const { code, phase, players, hostId, myWord, myRole,
+          clues, clueOrder, currentPlayerId, currentClueIndex,
+          hasVoted, hasRoundVoted, roundNumber, impostorRoundsSurvived, wordPair } = data;
+
+  state.myId        = socket.id;
+  state.myName      = loadSession()?.name || '';
+  state.roomCode    = code;
+  state.isHost      = hostId === socket.id;
+  state.players     = players;
+  state.myWord      = myWord || '';
+  state.myRole      = myRole || '';
+  state.clues       = clues || [];
+  state.clueOrder   = clueOrder || [];
+  state.currentClueIndex = currentClueIndex || 0;
+  state.hasVoted    = hasVoted;
+  state.hasRoundVoted = hasRoundVoted;
+  state.roundNumber = roundNumber || 1;
+  state.impostorRoundsSurvived = impostorRoundsSurvived || 0;
+
+  showToast('Reconnected ✅', 'success');
+
+  switch (phase) {
+    case 'lobby':
+      renderLobby(players, hostId);
+      showScreen('lobby');
+      break;
+
+    case 'reveal': {
+      document.getElementById('reveal-hidden').style.display = 'flex';
+      document.getElementById('reveal-shown').style.display = 'none';
+      document.getElementById('reveal-word').textContent = myWord;
+      const badge = document.getElementById('reveal-role-badge');
+      badge.textContent = myRole === 'impostor' ? '🕵️ You are the Impostor' : '✅ You are a Civilian';
+      badge.className = `role-badge ${myRole}`;
+      const btnReady = document.getElementById('btn-ready');
+      btnReady.disabled = false;
+      btnReady.textContent = "✅ I've Seen My Word";
+      document.getElementById('ready-count').textContent = `0 / ${players.length}`;
+      document.getElementById('ready-bar').style.width = '0%';
+      showScreen('reveal');
+      break;
+    }
+
+    case 'clues':
+      showScreen('clues');
+      renderClueScreen(currentPlayerId, clues, clueOrder, players);
+      break;
+
+    case 'round-vote':
+      showScreen('round-vote');
+      renderRoundVoteScreen(players, clues, roundNumber, impostorRoundsSurvived);
+      if (hasRoundVoted) {
+        document.getElementById('rv-buttons').style.display = 'none';
+        document.getElementById('rv-waiting').style.display = '';
+      }
+      break;
+
+    case 'voting':
+      showScreen('voting');
+      renderVotingScreen(players, clues);
+      if (hasVoted) {
+        document.getElementById('btn-vote').style.display = 'none';
+        document.getElementById('voting-wait').style.display = '';
+      }
+      break;
+
+    case 'results':
+      if (wordPair) {
+        showScreen('results');
+        renderResults({
+          tally: {}, eliminatedId: null, eliminatedName: null,
+          impostorId: null, impostorName: '?',
+          impostorFound: false, impostorWins: false,
+          civilianWord: wordPair.civilian, impostorWord: wordPair.impostor,
+          clues, players, votes: {}, roundsSurvived: impostorRoundsSurvived, skipped: false,
+        });
+      } else {
+        showScreen('lobby');
+      }
+      break;
+
+    default:
+      showScreen('home');
+  }
+});
+
+socket.on('rejoin-failed', ({ message }) => {
+  clearSession();
+  showToast(message, 'error');
+  showScreen('home');
 });
 
 socket.on('room-created', ({ code }) => {
   state.roomCode = code;
   state.isHost = true;
+  saveSession({ name: state.myName, roomCode: code });
   showScreen('lobby');
 });
 
 socket.on('join-success', ({ code }) => {
   state.roomCode = code;
+  saveSession({ name: state.myName, roomCode: code });
   showScreen('lobby');
 });
 
@@ -602,8 +719,15 @@ socket.on('game-results', (data) => {
 
 socket.on('player-left', ({ players, hostId }) => {
   state.players = players;
-  // Update host status
   state.isHost = hostId === state.myId;
+});
+
+socket.on('player-reconnected', ({ players, hostId }) => {
+  state.players = players;
+  state.isHost = hostId === state.myId;
+  // Update lobby if currently in lobby
+  const active = document.querySelector('.screen.active');
+  if (active && active.id === 'screen-lobby') renderLobby(players, hostId);
 });
 
 socket.on('game-aborted', ({ reason }) => {

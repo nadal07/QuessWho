@@ -149,6 +149,73 @@ io.on('connection', (socket) => {
     broadcastLobby(code);
   });
 
+  // REJOIN ROOM (after page refresh)
+  socket.on('rejoin-room', ({ name, roomCode }) => {
+    const room = getRoomSafe(roomCode);
+    if (!room) return socket.emit('rejoin-failed', { message: 'Room no longer exists.' });
+
+    const player = room.players.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+    if (!player) return socket.emit('rejoin-failed', { message: 'You are not in this room.' });
+
+    const oldId = player.id;
+    const newId = socket.id;
+
+    // Swap the socket ID everywhere in room state
+    player.id = newId;
+    if (room.hostId === oldId)      room.hostId = newId;
+    if (room.impostorId === oldId)  room.impostorId = newId;
+
+    // Update clue order
+    room.clueOrder = room.clueOrder.map(id => id === oldId ? newId : id);
+
+    // Migrate votes & roundVotes keyed by old socket ID
+    if (room.votes[oldId] !== undefined)      { room.votes[newId] = room.votes[oldId];      delete room.votes[oldId]; }
+    if (room.roundVotes[oldId] !== undefined) { room.roundVotes[newId] = room.roundVotes[oldId]; delete room.roundVotes[oldId]; }
+
+    // Migrate readyPlayers Set (if active during reveal phase)
+    if (room.readyPlayers && room.readyPlayers.has(oldId)) {
+      room.readyPlayers.delete(oldId);
+      room.readyPlayers.add(newId);
+    }
+
+    socket.join(roomCode);
+    socket.data.roomCode = roomCode;
+    socket.data.name = name.trim();
+
+    // Build private word/role for this player
+    let myWord = null, myRole = null;
+    if (room.wordPair) {
+      myRole = newId === room.impostorId ? 'impostor' : 'civilian';
+      myWord = myRole === 'impostor' ? room.wordPair.impostor : room.wordPair.civilian;
+    }
+
+    // Current turn player for clue phase
+    const currentPlayerId = room.clueOrder[room.currentClueIndex] || null;
+
+    socket.emit('rejoin-success', {
+      code: roomCode,
+      phase: room.phase,
+      players: room.players,
+      hostId: room.hostId,
+      myWord,
+      myRole,
+      clues: room.clues,
+      clueOrder: room.clueOrder,
+      currentPlayerId,
+      currentClueIndex: room.currentClueIndex,
+      hasVoted: room.votes[newId] !== undefined,
+      hasRoundVoted: room.roundVotes[newId] !== undefined,
+      roundNumber: room.roundNumber,
+      impostorRoundsSurvived: room.impostorRoundsSurvived,
+      wordPair: room.wordPair,
+    });
+
+    // Notify others in room
+    io.to(roomCode).emit('player-reconnected', { players: room.players, hostId: room.hostId });
+    console.log(`[Rejoin] ${name} rejoined room ${roomCode} (phase: ${room.phase})`);
+  });
+
+
   // JOIN ROOM
   socket.on('join-room', ({ code, name }) => {
     const upperCode = (code || '').trim().toUpperCase();
