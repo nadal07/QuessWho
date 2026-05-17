@@ -382,10 +382,14 @@ function renderResults(data) {
     sub.textContent   = `${impostorName} survived all ${MAX_ROUNDS} rounds!`;
   } else {
     // Wrong player eliminated — next round coming
-    icon.textContent  = '😐';
-    title.textContent = 'Wrong Player!';
-    title.style.color = 'var(--amber)';
-    sub.textContent   = `${impostorName} is still out there. Next round starting…`;
+    // icon.textContent  = '😐';
+    // title.textContent = 'Wrong Player!';
+    // title.style.color = 'var(--amber)';
+    // sub.textContent   = `${impostorName} is still out there. Next round starting…`;
+    icon.textContent  = '🕵️';
+    title.textContent = 'Impostor Wins!';
+    title.style.color = 'var(--red)';
+    sub.textContent   = `${impostorName} survived`;
   }
 
   // Words
