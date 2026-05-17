@@ -556,36 +556,20 @@ socket.on('round-skipped', ({ roundNumber, impostorRoundsSurvived, roundsRemaini
   showToast(`Round skipped! ${roundsRemaining} round${roundsRemaining !== 1 ? 's' : ''} left for impostor to win.`, '');
 });
 
-socket.on('new-round', ({ word, role, players, clueOrder, roundNumber, impostorRoundsSurvived }) => {
-  state.myWord = word;
-  state.myRole = role;
+socket.on('next-round-clues', ({ players, clueOrder, currentPlayerId, roundNumber, impostorRoundsSurvived }) => {
   state.players = players;
   state.clueOrder = clueOrder;
   state.clues = [];
-  state.selectedVoteId = null;
+  state.currentClueIndex = 0;
   state.hasVoted = false;
   state.hasRoundVoted = false;
-  state.wordRevealed = false;
-  state.readySubmitted = false;
+  state.selectedVoteId = null;
   state.roundNumber = roundNumber;
   state.impostorRoundsSurvived = impostorRoundsSurvived;
 
-  document.getElementById('reveal-hidden').style.display = 'flex';
-  document.getElementById('reveal-shown').style.display = 'none';
-  document.getElementById('reveal-word').textContent = word;
-
-  const badge = document.getElementById('reveal-role-badge');
-  badge.textContent = role === 'impostor' ? '🕵️ You are the Impostor' : '✅ You are a Civilian';
-  badge.className = `role-badge ${role}`;
-
-  const btnReady = document.getElementById('btn-ready');
-  btnReady.disabled = false;
-  btnReady.textContent = "✅ I've Seen My Word";
-
-  document.getElementById('ready-count').textContent = `0 / ${players.length}`;
-  document.getElementById('ready-bar').style.width = '0%';
-
-  showScreen('reveal');
+  showToast(`Round ${roundNumber} — same word, fresh clues!`, '');
+  showScreen('clues');
+  renderClueScreen(currentPlayerId, [], clueOrder, players);
 });
 
 socket.on('voting-phase-start', ({ players, clues }) => {

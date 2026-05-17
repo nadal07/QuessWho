@@ -53,36 +53,28 @@ function broadcastLobby(code) {
   });
 }
 
-// Start a new round with a fresh word — same players, same impostor
-function startNewRound(code) {
+// Continue same game to next round — SAME word, SAME impostor, just reset clues
+function continueToNextRound(code) {
   const room = getRoomSafe(code);
   if (!room) return;
 
-  const pair = words[Math.floor(Math.random() * words.length)];
-  room.wordPair = pair;
   room.clues = [];
   room.votes = {};
   room.roundVotes = {};
   room.clueOrder = [...room.players].sort(() => Math.random() - 0.5).map(p => p.id);
   room.currentClueIndex = 0;
-  room.readyPlayers = null;
-  room.phase = 'reveal';
+  room.phase = 'clues';
 
-  room.players.forEach(player => {
-    const assignedWord = player.id === room.impostorId ? pair.impostor : pair.civilian;
-    const role = player.id === room.impostorId ? 'impostor' : 'civilian';
-    io.to(player.id).emit('new-round', {
-      word: assignedWord,
-      role,
-      category: pair.category,
-      players: room.players,
-      clueOrder: room.clueOrder,
-      roundNumber: room.roundNumber,
-      impostorRoundsSurvived: room.impostorRoundsSurvived,
-    });
+  const currentPlayerId = room.clueOrder[0];
+  io.to(code).emit('next-round-clues', {
+    players: room.players,
+    clueOrder: room.clueOrder,
+    currentPlayerId,
+    roundNumber: room.roundNumber,
+    impostorRoundsSurvived: room.impostorRoundsSurvived,
   });
 
-  console.log(`[Game] Room ${code} | New round ${room.roundNumber} | ${pair.civilian}/${pair.impostor}`);
+  console.log(`[Game] Room ${code} | Next round ${room.roundNumber} (same word)`);
 }
 
 function removePlayer(socketId) {
@@ -329,13 +321,13 @@ io.on('connection', (socket) => {
         });
         console.log(`[Game] Room ${code} | Impostor won after ${MAX_ROUNDS} rounds!`);
       } else {
-        // Start next round
+        // Continue to next round with SAME word
         io.to(code).emit('round-skipped', {
           roundNumber: room.roundNumber,
           impostorRoundsSurvived: room.impostorRoundsSurvived,
           roundsRemaining: MAX_ROUNDS - room.impostorRoundsSurvived,
         });
-        setTimeout(() => startNewRound(code), 3000);
+        setTimeout(() => continueToNextRound(code), 3000);
       }
     } else {
       // All civilians want to vote — proceed to elimination
@@ -408,9 +400,11 @@ io.on('connection', (socket) => {
         skipped: false,
       });
 
-      // If impostor survived but hasn't won yet, start next round after delay
+      // If wrong person eliminated: impostor still in play but NOT max rounds yet
+      // Game stays on results — host must start a new game via play-again → lobby
       if (!impostorFound && !impostorWins) {
-        setTimeout(() => startNewRound(code), 6000);
+        // Automatically continue to next clue round after delay
+        setTimeout(() => continueToNextRound(code), 6000);
       }
 
       console.log(`[Game] Room ${code} results | Impostor: ${impostorPlayer?.name} | Found: ${impostorFound} | Survived: ${room.impostorRoundsSurvived}`);
