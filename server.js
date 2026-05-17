@@ -30,6 +30,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 const rooms = {};
 
 const MAX_ROUNDS = 4;
+const REJOIN_GRACE_MS = 15000; // 15 s to reconnect after a page refresh
+const disconnectTimers = {};   // key: `${roomCode}:${playerName}`
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function generateCode() {
@@ -151,6 +153,12 @@ io.on('connection', (socket) => {
 
   // REJOIN ROOM (after page refresh)
   socket.on('rejoin-room', ({ name, roomCode }) => {
+    // Cancel any pending disconnect timer for this player
+    const timerKey = `${roomCode}:${(name || '').trim().toLowerCase()}`;
+    if (disconnectTimers[timerKey]) {
+      clearTimeout(disconnectTimers[timerKey]);
+      delete disconnectTimers[timerKey];
+    }
     const room = getRoomSafe(roomCode);
     if (!room) return socket.emit('rejoin-failed', { message: 'Room no longer exists.' });
 
@@ -500,10 +508,24 @@ io.on('connection', (socket) => {
     broadcastLobby(code);
   });
 
-  // DISCONNECT
+  // DISCONNECT — give players a grace period to reconnect (page refresh)
   socket.on('disconnect', () => {
-    console.log(`[-] Disconnected: ${socket.id}`);
-    removePlayer(socket.id);
+    const code = socket.data.roomCode;
+    const name = (socket.data.name || '').trim().toLowerCase();
+    console.log(`[-] Disconnected: ${socket.id} (${socket.data.name || 'unknown'})`);
+
+    if (code && name) {
+      const timerKey = `${code}:${name}`;
+      // Cancel any existing timer for this player (safety)
+      if (disconnectTimers[timerKey]) clearTimeout(disconnectTimers[timerKey]);
+
+      disconnectTimers[timerKey] = setTimeout(() => {
+        delete disconnectTimers[timerKey];
+        removePlayer(socket.id);
+      }, REJOIN_GRACE_MS);
+    } else {
+      removePlayer(socket.id);
+    }
   });
 });
 
