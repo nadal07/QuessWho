@@ -228,16 +228,17 @@ function renderClueScreen(currentPlayerId, clues, clueOrder, players) {
   if (state.clues.length === 0) {
     list.innerHTML = '<p class="small text-dim text-center">No clues yet…</p>';
   } else {
-    list.innerHTML = state.clues.map((c, i) => {
+    list.innerHTML = state.clues.map((c) => {
       const pIdx = state.players.findIndex(p => p.id === c.playerId);
+      const initial = (c.playerName || '?')[0].toUpperCase();
       return `
         <div class="clue-item">
           <div class="avatar" style="${avatarStyle(pIdx)};width:30px;height:30px;font-size:.75rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
-            ${c.playerName[0].toUpperCase()}
+            ${initial}
           </div>
           <div>
-            <p class="ci-name">${escHtml(c.playerName)}</p>
-            <p class="ci-text">${escHtml(c.clue)}</p>
+            <p class="ci-name">${escHtml(c.playerName || '?')}</p>
+            <p class="ci-text">${escHtml(c.clue || '')}</p>
           </div>
         </div>`;
     }).join('');
@@ -286,14 +287,15 @@ function renderRoundVoteScreen(players, clues, roundNumber, impostorRoundsSurviv
   const cl = document.getElementById('rv-clue-list');
   cl.innerHTML = clues.map((c) => {
     const pIdx = players.findIndex(p => p.id === c.playerId);
+    const initial = (c.playerName || '?')[0].toUpperCase();
     return `
       <div class="clue-item">
         <div class="avatar" style="${avatarStyle(pIdx)};width:30px;height:30px;font-size:.75rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
-          ${c.playerName[0].toUpperCase()}
+          ${initial}
         </div>
         <div>
-          <p class="ci-name">${escHtml(c.playerName)}</p>
-          <p class="ci-text">${escHtml(c.clue)}</p>
+          <p class="ci-name">${escHtml(c.playerName || '?')}</p>
+          <p class="ci-text">${escHtml(c.clue || '')}</p>
         </div>
       </div>`;
   }).join('');
@@ -318,11 +320,11 @@ function renderVotingScreen(players, clues) {
     return `
       <div class="clue-item">
         <div class="avatar" style="${avatarStyle(pIdx)};width:30px;height:30px;font-size:.75rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">
-          ${c.playerName[0].toUpperCase()}
+          ${(c.playerName || '?')[0].toUpperCase()}
         </div>
         <div>
-          <p class="ci-name">${escHtml(c.playerName)}</p>
-          <p class="ci-text">${escHtml(c.clue)}</p>
+          <p class="ci-name">${escHtml(c.playerName || '?')}</p>
+          <p class="ci-text">${escHtml(c.clue || '')}</p>
         </div>
       </div>`;
   }).join('');
